@@ -4,11 +4,7 @@
 #include "main.h"
 #include "epd.h"
 #include "epd_spi.h"
-#include "epd_bw_213.h"
-#include "epd_bwr_213.h"
-#include "epd_bw_213_ice.h"
-// #include "epd_bwr_154.h"
-#include "epd_bwr_296.h"
+#include "epd_bwr_213.h" // 只保留这一个驱动头文件
 #include "drivers.h"
 #include "stack/ble/ble.h"
 
@@ -22,7 +18,7 @@ extern const uint8_t ucMirror[];
 #include "font16zh.h"
 #include "font30.h"
 
-RAM uint8_t epd_model = 0; // 0 = Undetected, 1 = BW213, 2 = BWR213, 3 = BWR154, 4 = BW213ICE, 5 BWR296
+RAM uint8_t epd_model = 2; // 直接写死 2，代表 2.13 寸
 const char *epd_model_string[] = {"NC", "BW213", "BWR213", "BWR154", "213ICE", "BWR296"};
 RAM uint8_t epd_update_state = 0;
 
@@ -58,44 +54,18 @@ void set_EPD_wait_flush() {
     epd_wait_update = 1;
 }
 
-
-
-// Here we detect what E-Paper display is connected
+// 这里直接被我们“暴力”修改，不探测了，直接认定是 213
 _attribute_ram_code_ void EPD_detect_model(void)
 {
     EPD_init();
-    // system power
     EPD_POWER_ON();
-
     WaitMs(10);
-    // Reset the EPD driver IC
     gpio_write(EPD_RESET, 0);
     WaitMs(10);
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    // remove 296 for now
-    // if (EPD_BWR_296_detect())
-    // {
-    //     epd_model = 5;
-    // }
-    if (EPD_BWR_213_detect())
-    {
-        epd_model = 2;
-    }
-    // else if (EPD_BWR_154_detect()) // Right now this will never trigger, the 154 is same to 213BWR right now.
-    // {
-    //     epd_model = 3;
-    // }
-    else if (EPD_BW_213_ice_detect())
-    {
-        epd_model = 4;
-    }
-    else
-    {
-        epd_model = 1;
-    }
-
+    epd_model = 2; // 暴力指定
     EPD_POWER_OFF();
 }
 
@@ -104,61 +74,34 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
     if (epd_temperature_is_read)
         return epd_temperature;
 
-    if (!epd_model)
-        EPD_detect_model();
-
     EPD_init();
-    // system power
     EPD_POWER_ON();
     WaitMs(5);
-    // Reset the EPD driver IC
     gpio_write(EPD_RESET, 0);
     WaitMs(10);
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    if (epd_model == 1)
-        epd_temperature = EPD_BW_213_read_temp();
-    else if (epd_model == 2)
-        epd_temperature = EPD_BWR_213_read_temp();
-//    else if (epd_model == 3)
-//        epd_temperature = EPD_BWR_154_read_temp();
-    else if (epd_model == 4 || epd_model == 5)
-        epd_temperature = EPD_BW_213_ice_read_temp();
+    // 只调用 213 的读温度
+    epd_temperature = EPD_BWR_213_read_temp();
 
     EPD_POWER_OFF();
-
     epd_temperature_is_read = 1;
-
     return epd_temperature;
 }
 
 _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_image, int size, uint8_t full_or_partial)
 {
-    if (!epd_model)
-        EPD_detect_model();
-
     EPD_init();
-    // system power
     EPD_POWER_ON();
     WaitMs(5);
-    // Reset the EPD driver IC
     gpio_write(EPD_RESET, 0);
     WaitMs(10);
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    if (epd_model == 1)
-        epd_temperature = EPD_BW_213_Display(image, size, full_or_partial);
-    else if (epd_model == 2)
-        epd_temperature = EPD_BWR_213_Display(image, size, full_or_partial);
-//    else if (epd_model == 3)
-//        epd_temperature = EPD_BWR_154_Display(image, size, full_or_partial);
-    else if (epd_model == 4)
-        epd_temperature = EPD_BW_213_ice_Display(image, size, full_or_partial);
-    else if (epd_model == 5)
-        epd_temperature = EPD_BWR_296_Display_BWR(image, red_image, size, full_or_partial);
-        //epd_temperature = EPD_BWR_296_Display(image, size, full_or_partial);
+    // 只调用 213 的显示函数
+    epd_temperature = EPD_BWR_213_Display(image, size, full_or_partial);
 
     epd_temperature_is_read = 1;
     epd_update_state = 1;
@@ -166,18 +109,8 @@ _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_i
 
 _attribute_ram_code_ void epd_set_sleep(void)
 {
-    if (!epd_model)
-        EPD_detect_model();
-
-    if (epd_model == 1)
-        EPD_BW_213_set_sleep();
-    else if (epd_model == 2)
-        EPD_BWR_213_set_sleep();
-//    else if (epd_model == 3)
-//        EPD_BWR_154_set_sleep();
-    else if (epd_model == 4 || epd_model == 5)
-        EPD_BW_213_ice_set_sleep();
-
+    // 只调用 213 的休眠
+    EPD_BWR_213_set_sleep();
     EPD_POWER_OFF();
     epd_update_state = 0;
 }
@@ -187,19 +120,12 @@ _attribute_ram_code_ uint8_t epd_state_handler(void)
     switch (epd_update_state)
     {
     case 0:
-        // Nothing todo
         break;
-    case 1: // check if refresh is done and sleep epd if so
-        if (epd_model == 1)
-        {
-            if (!EPD_IS_BUSY())
-                epd_set_sleep();
-        }
-        else
-        {
-            if (EPD_IS_BUSY())
-                epd_set_sleep();
-        }
+    case 1: 
+        // 因为我们在 epd_spi.h 里去掉了感叹号，高电平代表忙。
+        // 所以这里用 if (EPD_IS_BUSY())，忙的时候就等待，闲下来就休眠
+        if (EPD_IS_BUSY())
+            epd_set_sleep();
         break;
     }
     return epd_update_state;
@@ -210,14 +136,14 @@ _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width
     int x, y;
     uint8_t *s, *d;
     for (y = 0; y < (height / 8); y++)
-    { // byte rows
+    { 
         d = &pDst[y];
         s = &pSrc[y * width];
         for (x = 0; x < width; x++)
         {
             d[x * (height / 8)] = ~ucMirror[s[width - 1 - x]]; // invert and flip
-        }                                                      // for x
-    }                                                          // for y
+        } 
+    } 
 }
 
 _attribute_ram_code_ void TIFFDraw(TIFFDRAW *pDraw)
@@ -226,21 +152,19 @@ _attribute_ram_code_ void TIFFDraw(TIFFDRAW *pDraw)
     int x, y;
 
     s = pDraw->pPixels;
-    y = pDraw->y;                          // current line
-    d = &epd_buffer[(249 * 16) + (y / 8)]; // rotated 90 deg clockwise
-    ucDstMask = 0x80 >> (y & 7);           // destination mask
-    ucSrcMask = 0;                         // src mask
+    y = pDraw->y;                          
+    d = &epd_buffer[(249 * 16) + (y / 8)]; 
+    ucDstMask = 0x80 >> (y & 7);           
+    ucSrcMask = 0;                         
     for (x = 0; x < pDraw->iWidth; x++)
     {
-        // Slower to draw this way, but it allows us to use a single buffer
-        // instead of drawing and then converting the pixels to be the EPD format
         if (ucSrcMask == 0)
-        { // load next source byte
+        { 
             ucSrcMask = 0x80;
             uc = *s++;
         }
         if (!(uc & ucSrcMask))
-        { // black pixel
+        { 
             d[-(x * 16)] &= ~ucDstMask;
         }
         ucSrcMask >>= 1;
@@ -249,7 +173,6 @@ _attribute_ram_code_ void TIFFDraw(TIFFDRAW *pDraw)
 
 _attribute_ram_code_ void epd_display_tiff(uint8_t *pData, int iSize)
 {
-    // test G4 decoder
     epd_clear();
     TIFF_openRAW(&tiff, 250, 122, BITDIR_MSB_FIRST, pData, iSize, TIFFDraw);
     TIFF_setDrawParameters(&tiff, 65536, TIFF_PIXEL_1BPP, 0, 0, 250, 122, NULL);
@@ -259,6 +182,7 @@ _attribute_ram_code_ void epd_display_tiff(uint8_t *pData, int iSize)
 }
 
 extern uint8_t mac_public[6];
+
 _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_mv, int16_t temperature, uint8_t full_or_partial)
 {
     uint8_t battery_level;
@@ -266,37 +190,9 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     if (epd_update_state)
         return;
 
-    if (!epd_model)
-    {
-        EPD_detect_model();
-    }
+    // 直接写死分辨率，不需要再判断了
     uint16_t resolution_w = 250;
     uint16_t resolution_h = 128; // 122 real pixel, but needed to have a full byte
-    if (epd_model == 1)
-    {
-        resolution_w = 250;
-        resolution_h = 128; // 122 real pixel, but needed to have a full byte
-    }
-    else if (epd_model == 2)
-    {
-        resolution_w = 250;
-        resolution_h = 128; // 122 real pixel, but needed to have a full byte
-    }
-    else if (epd_model == 3)
-    {
-        resolution_w = 200;
-        resolution_h = 200;
-    }
-    else if (epd_model == 4)
-    {
-        resolution_w = 212;
-        resolution_h = 104;
-    }
-    else if (epd_model == 5)
-    {
-        resolution_w = 296;
-        resolution_h = 128;
-    }
 
     epd_clear();
 
@@ -334,21 +230,15 @@ _attribute_ram_code_ void epd_clear(void)
     memset(epd_buffer, 0x00, epd_buffer_size);
     memset(epd_temp, 0x00, epd_buffer_size);
 }
+
 void update_time_scene(struct date_time _time, uint16_t battery_mv, int16_t temperature, void (*scene)(struct date_time, uint16_t, int16_t,  uint8_t)) {
-    // default scene: show default time, battery, ble address, temperature
     if (epd_update_state)
         return;
-
-    if (!epd_model)
-    {
-        EPD_detect_model();
-    }
 
     if (epd_wait_update) {
         scene(_time, battery_mv, temperature, 1);
         epd_wait_update = 0;
     }
-
     else if (_time.tm_min != minute_refresh)
     {
         minute_refresh = _time.tm_min;
