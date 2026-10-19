@@ -123,6 +123,7 @@ _attribute_ram_code_ uint8_t epd_state_handler(void)
     return epd_update_state;
 }
 
+// 替换 epd.c 中的 FixBuffer 函数
 _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width, uint16_t height)
 {
     int x, y;
@@ -133,8 +134,8 @@ _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width
         s = &pSrc[y * width];
         for (x = 0; x < width; x++)
         {
-            // 【修复】把 ~ 加回来，防止画出来的底色变成全黑
-            d[x * (height / 8)] = ~ucMirror[s[width - 1 - x]]; 
+            // 不加 ~，让白色底(0x00)直接显示为白色
+            d[x * (height / 8)] = ucMirror[s[width - 1 - x]]; 
         } 
     } 
 }
