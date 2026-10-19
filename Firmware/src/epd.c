@@ -92,6 +92,14 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
 
 _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_image, int size, uint8_t full_or_partial)
 {
+    // ==========================================
+    // 🚨 纯色测试代码开始（全白 0xFF，想测全黑改成 0x00）
+    // ==========================================
+    for (int i = 0; i < size; i++) {
+        image[i] = 0xFF; 
+    }
+    // ==========================================
+
     EPD_init();
     EPD_POWER_ON();
     WaitMs(5);
@@ -123,7 +131,6 @@ _attribute_ram_code_ uint8_t epd_state_handler(void)
         break;
     case 1: 
         // 因为我们在 epd_spi.h 里去掉了感叹号，高电平代表忙。
-        // 所以这里用 if (EPD_IS_BUSY())，忙的时候就等待，闲下来就休眠
         if (EPD_IS_BUSY())
             epd_set_sleep();
         break;
@@ -178,7 +185,7 @@ _attribute_ram_code_ void epd_display_tiff(uint8_t *pData, int iSize)
     TIFF_setDrawParameters(&tiff, 65536, TIFF_PIXEL_1BPP, 0, 0, 250, 122, NULL);
     TIFF_decode(&tiff);
     TIFF_close(&tiff);
-    EPD_Display(epd_buffer, NULL, epd_buffer_size, 1);
+    EPD_Display(epd_buffer, NULL, 4000, 1); // 修复：强制 4000 字节
 }
 
 extern uint8_t mac_public[6];
@@ -192,7 +199,7 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
 
     // 直接写死分辨率，不需要再判断了
     uint16_t resolution_w = 250;
-    uint16_t resolution_h = 128; // 122 real pixel, but needed to have a full byte
+    uint16_t resolution_h = 128; 
 
     epd_clear();
 
@@ -212,7 +219,9 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     sprintf(buff, "Battery %dmV  %d%%", battery_mv, battery_level);
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16, 10, 120, (char *)buff, 1);
     FixBuffer(epd_temp, epd_buffer, resolution_w, resolution_h);
-    EPD_Display(epd_buffer, NULL, resolution_w * resolution_h / 8, full_or_partial);
+    
+    // 修复：强制 4000 字节
+    EPD_Display(epd_buffer, NULL, 250 * 128 / 8, full_or_partial);
 }
 
 _attribute_ram_code_ void epd_display_char(uint8_t data)
@@ -340,5 +349,6 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
 
     FixBuffer(epd_temp, epd_buffer, epd_width, epd_height);
 
-    EPD_Display(epd_buffer, NULL, epd_width * epd_height / 8, full_or_partial);
+    // 修复：原来发 256*128/8 = 4096 字节会导致花屏，现在强制发 250*128/8 = 4000 字节
+    EPD_Display(epd_buffer, NULL, 250 * 128 / 8, full_or_partial);
 }
