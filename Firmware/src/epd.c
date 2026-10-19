@@ -127,17 +127,27 @@ _attribute_ram_code_ uint8_t epd_state_handler(void)
 _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width, uint16_t height)
 {
     int x, y;
-    uint8_t *s, *d;
-    for (y = 0; y < (height / 8); y++)
-    { 
-        d = &pDst[y];
-        s = &pSrc[y * width];
-        for (x = 0; x < width; x++)
-        {
-            // 不加 ~，让白色底(0x00)直接显示为白色
-            d[x * (height / 8)] = ucMirror[s[width - 1 - x]]; 
-        } 
-    } 
+    // 先把目标清空为 0x00 (也就是白色)
+    memset(pDst, 0x00, 4000);
+
+    for (y = 0; y < height; y++) { // 画布高 128
+        for (x = 0; x < width; x++) { // 画布宽 250
+            // 严格按 32 字节步长读取画布（因为 epd_width 是 256，256/8 = 32）
+            int src_byte = y * 32 + (x / 8);
+            int src_bit = 7 - (x % 8);
+            int color = (pSrc[src_byte] >> src_bit) & 1;
+            
+            if (color) { // 如果画布画的是黑色
+                // 旋转 90 度映射到屏幕
+                int dst_x = 127 - y; 
+                int dst_y = x;
+                
+                int dst_byte = dst_y * 16 + (dst_x / 8); // 屏幕宽 128，128/8 = 16
+                int dst_bit = 7 - (dst_x % 8);
+                pDst[dst_byte] |= (1 << dst_bit); // 置为黑色
+            }
+        }
+    }
 }
 
 _attribute_ram_code_ void TIFFDraw(TIFFDRAW *pDraw)
