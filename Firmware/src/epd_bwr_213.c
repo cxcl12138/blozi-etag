@@ -7,6 +7,7 @@
 #include "drivers.h"
 #include "stack/ble/ble.h"
 
+// IL3895 专用 LUT
 const uint8_t LUTDefault_full[] = {
     0x32, 0x22, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x11, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
@@ -33,7 +34,7 @@ static void EPD_IL3895_Init(void) {
     EPD_WriteData(0xF9); EPD_WriteData(0x00); EPD_WriteData(0x00);
 
     EPD_WriteCmd(0x11);
-    EPD_WriteData(0x03); // X加，Y加。如果字反了，换成 0x01 或 0x02
+    EPD_WriteData(0x03); // 如果图像颠倒，改为 0x01 或 0x02
 
     EPD_WriteCmd(0x44);
     EPD_WriteData(0x00); EPD_WriteData(0x0F); 
@@ -56,16 +57,15 @@ _attribute_ram_code_ uint8_t EPD_BWR_213_Display(unsigned char *image, int size,
     } else { // 局刷
         EPD_WriteCmd(LUTDefault_part[0]); 
         EPD_Send_LUT(&LUTDefault_part[1], sizeof(LUTDefault_part) - 1);
-        
-        EPD_LoadImage(image, size, 0x10);
+        // 删掉了 0x10 这个不存在的指令，只保留 0x24
         EPD_LoadImage(image, size, 0x24);
     }
 
     EPD_WriteCmd(0x22);
     if (full_or_partial) {
-        EPD_WriteData(0xC7); // 全刷参数
+        EPD_WriteData(0xC7); // 全刷
     } else {
-        EPD_WriteData(0xCF); // 局刷参数 (如果花屏，改成 0xC7)
+        EPD_WriteData(0xCF); // 局刷
     }
     EPD_WriteCmd(0x20);
     EPD_CheckStatus(100);
