@@ -88,9 +88,7 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
 
 _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_image, int size, uint8_t full_or_partial)
 {
-    // ==========================================
-    // 🚨 纯色测试代码已删除，恢复正常显示
-    // ==========================================
+    // 纯色测试代码已删除，恢复正常显示
 
     EPD_init();
     EPD_POWER_ON();
@@ -137,7 +135,8 @@ _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width
         s = &pSrc[y * width];
         for (x = 0; x < width; x++)
         {
-            d[x * (height / 8)] = ~ucMirror[s[width - 1 - x]]; // invert and flip
+            // 【终极修复】去掉了原来的 ~ 取反符号，解决全黑问题
+            d[x * (height / 8)] = ucMirror[s[width - 1 - x]]; 
         } 
     } 
 }
@@ -186,7 +185,6 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     if (epd_update_state)
         return;
 
-    // 直接用 250 x 128
     uint16_t resolution_w = 250;
     uint16_t resolution_h = 128; 
 
@@ -271,7 +269,6 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
 
     epd_clear();
 
-    // 【核心修改】把 epd_width (256) 强制替换成 250，防止坐标计算和 FixBuffer 越界
     uint16_t resolution_w = 250;
     uint16_t resolution_h = 128;
     
@@ -340,7 +337,6 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
     }
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16_zh, 170, 122, (char *)buff, 1);
 
-    // 【核心修改】使用 250 传递
     FixBuffer(epd_temp, epd_buffer, resolution_w, resolution_h);
 
     EPD_Display(epd_buffer, NULL, resolution_w * resolution_h / 8, full_or_partial);
