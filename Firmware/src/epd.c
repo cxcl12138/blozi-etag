@@ -37,13 +37,11 @@ RAM uint8_t epd_temp[epd_buffer_size]; // for OneBitDisplay to draw into
 OBDISP obd;                        // virtual display structure
 TIFFIMAGE tiff;
 
-// With this we can force a display if it wasnt detected correctly
 void set_EPD_model(uint8_t model_nr)
 {
     epd_model = model_nr;
 }
 
-// With this we can force a display if it wasnt detected correctly
 void set_EPD_scene(uint8_t scene)
 {
     epd_scene = scene;
@@ -54,7 +52,6 @@ void set_EPD_wait_flush() {
     epd_wait_update = 1;
 }
 
-// 这里直接被我们“暴力”修改，不探测了，直接认定是 213
 _attribute_ram_code_ void EPD_detect_model(void)
 {
     EPD_init();
@@ -82,7 +79,6 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    // 只调用 213 的读温度
     epd_temperature = EPD_BWR_213_read_temp();
 
     EPD_POWER_OFF();
@@ -93,11 +89,7 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
 _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_image, int size, uint8_t full_or_partial)
 {
     // ==========================================
-    // 🚨 纯色测试代码开始（全白 0xFF，想测全黑改成 0x00）
-    // ==========================================
-    for (int i = 0; i < size; i++) {
-        image[i] = 0xFF; 
-    }
+    // 🚨 纯色测试代码已删除，恢复正常显示
     // ==========================================
 
     EPD_init();
@@ -108,7 +100,6 @@ _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_i
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    // 只调用 213 的显示函数
     epd_temperature = EPD_BWR_213_Display(image, size, full_or_partial);
 
     epd_temperature_is_read = 1;
@@ -117,7 +108,6 @@ _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_i
 
 _attribute_ram_code_ void epd_set_sleep(void)
 {
-    // 只调用 213 的休眠
     EPD_BWR_213_set_sleep();
     EPD_POWER_OFF();
     epd_update_state = 0;
@@ -130,7 +120,6 @@ _attribute_ram_code_ uint8_t epd_state_handler(void)
     case 0:
         break;
     case 1: 
-        // 因为我们在 epd_spi.h 里去掉了感叹号，高电平代表忙。
         if (EPD_IS_BUSY())
             epd_set_sleep();
         break;
@@ -185,7 +174,7 @@ _attribute_ram_code_ void epd_display_tiff(uint8_t *pData, int iSize)
     TIFF_setDrawParameters(&tiff, 65536, TIFF_PIXEL_1BPP, 0, 0, 250, 122, NULL);
     TIFF_decode(&tiff);
     TIFF_close(&tiff);
-    EPD_Display(epd_buffer, NULL, 4000, 1); // 修复：强制 4000 字节
+    EPD_Display(epd_buffer, NULL, 4000, 1); 
 }
 
 extern uint8_t mac_public[6];
@@ -197,7 +186,7 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     if (epd_update_state)
         return;
 
-    // 直接写死分辨率，不需要再判断了
+    // 直接用 250 x 128
     uint16_t resolution_w = 250;
     uint16_t resolution_h = 128; 
 
@@ -218,10 +207,10 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     obdWriteStringCustom(&obd, (GFXfont *)&Special_Elite_Regular_30, 10, 95, (char *)buff, 1);
     sprintf(buff, "Battery %dmV  %d%%", battery_mv, battery_level);
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16, 10, 120, (char *)buff, 1);
+    
     FixBuffer(epd_temp, epd_buffer, resolution_w, resolution_h);
     
-    // 修复：强制 4000 字节
-    EPD_Display(epd_buffer, NULL, 250 * 128 / 8, full_or_partial);
+    EPD_Display(epd_buffer, NULL, resolution_w * resolution_h / 8, full_or_partial);
 }
 
 _attribute_ram_code_ void epd_display_char(uint8_t data)
@@ -254,11 +243,11 @@ void update_time_scene(struct date_time _time, uint16_t battery_mv, int16_t temp
         if (_time.tm_hour != hour_refresh)
         {
             hour_refresh = _time.tm_hour;
-            scene(_time, battery_mv, temperature, 1);
+            scene(_time, battery_mv, temperature, 1); // 跨小时全刷
         }
         else
         {
-            scene(_time, battery_mv, temperature, 0);
+            scene(_time, battery_mv, temperature, 0); // 跨分钟局刷
         }
     }
 }
@@ -282,7 +271,11 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
 
     epd_clear();
 
-    obdCreateVirtualDisplay(&obd, epd_width, epd_height, epd_temp);
+    // 【核心修改】把 epd_width (256) 强制替换成 250，防止坐标计算和 FixBuffer 越界
+    uint16_t resolution_w = 250;
+    uint16_t resolution_h = 128;
+    
+    obdCreateVirtualDisplay(&obd, resolution_w, resolution_h, epd_temp);
     obdFill(&obd, 0, 0); // fill with white
 
     char buff[100];
@@ -347,8 +340,8 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
     }
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16_zh, 170, 122, (char *)buff, 1);
 
-    FixBuffer(epd_temp, epd_buffer, epd_width, epd_height);
+    // 【核心修改】使用 250 传递
+    FixBuffer(epd_temp, epd_buffer, resolution_w, resolution_h);
 
-    // 修复：原来发 256*128/8 = 4096 字节会导致花屏，现在强制发 250*128/8 = 4000 字节
-    EPD_Display(epd_buffer, NULL, 250 * 128 / 8, full_or_partial);
+    EPD_Display(epd_buffer, NULL, resolution_w * resolution_h / 8, full_or_partial);
 }
