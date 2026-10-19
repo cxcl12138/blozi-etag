@@ -88,8 +88,6 @@ _attribute_ram_code_ uint8_t EPD_read_temp(void)
 
 _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_image, int size, uint8_t full_or_partial)
 {
-    // 纯色测试代码已删除，恢复正常显示
-
     EPD_init();
     EPD_POWER_ON();
     WaitMs(5);
@@ -135,8 +133,8 @@ _attribute_ram_code_ void FixBuffer(uint8_t *pSrc, uint8_t *pDst, uint16_t width
         s = &pSrc[y * width];
         for (x = 0; x < width; x++)
         {
-            // 【终极修复】去掉了原来的 ~ 取反符号，解决全黑问题
-            d[x * (height / 8)] = ucMirror[s[width - 1 - x]]; 
+            // 【修复】把 ~ 加回来，防止画出来的底色变成全黑
+            d[x * (height / 8)] = ~ucMirror[s[width - 1 - x]]; 
         } 
     } 
 }
@@ -173,7 +171,7 @@ _attribute_ram_code_ void epd_display_tiff(uint8_t *pData, int iSize)
     TIFF_setDrawParameters(&tiff, 65536, TIFF_PIXEL_1BPP, 0, 0, 250, 122, NULL);
     TIFF_decode(&tiff);
     TIFF_close(&tiff);
-    EPD_Display(epd_buffer, NULL, 4000, 1); 
+    EPD_Display(epd_buffer, NULL, 4000, 1); // 强制 4000 字节
 }
 
 extern uint8_t mac_public[6];
@@ -339,5 +337,6 @@ void epd_display_time_with_date(struct date_time _time, uint16_t battery_mv, int
 
     FixBuffer(epd_temp, epd_buffer, resolution_w, resolution_h);
 
+    // 强制发送 4000 字节（250 * 128 / 8），防止显存越界导致花屏
     EPD_Display(epd_buffer, NULL, resolution_w * resolution_h / 8, full_or_partial);
 }
